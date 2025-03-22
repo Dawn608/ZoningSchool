@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peta Zonasi Sekolah</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            display: flex;
+        }
+        .sidebar {
+            width: 230px;
+            background: #d1c4e9;
+            color: #5d4037;
+            padding: 15px;
+            height: 100vh;
+            overflow-y: auto;
+            position: fixed;
+            top: 0;
+            left: 0;
+            transition: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar.hidden {
+            overflow: hidden;
+            transform: translateX(-100%);
+        }
+        .sidebar h2 {
+            color: #5d4037;
+            font-size: 22px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .sidebar input, .sidebar select, .sidebar button {
+            width: calc(100% - 30px);
+            padding: 10px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 400;
+        }
+        .sidebar button {
+            background-color: #7e57c2;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .sidebar button:hover {
+            background-color: #5e35b1;
+        }
+        #map {
+            flex-grow: 1;
+            height: 100vh;
+            margin-left: 0px;
+            transition: margin-left 0.3s ease;
+            width: calc(100%-250px);
+        }
+        #map.fullscreen {
+            width: 100%;
+        }
+        .toggle-btn {
+            position: fixed;
+            top: 0px;
+            left: 210px;
+            left: 260px;
+            background: #7e57c2;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: left 0.3s ease;
+            font-size: 16px;
+            z-index: 1000;
+            font-weight: 600;
+        }
+        .toggle-btn.hidden {
+            left: 5px;
+       
+        }
+        .sidebar label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 5px;
+            font-weight: 400;
+        }
+        .sidebar input {
+            width: calc(100% - 20px);
+            padding: 8px;
+            font-size: 14px;
+            text-align: center;
+        }
+        .toggle-btn.hidden {
+            left: 0px;
+        }
+        .footer {
+            margin-top: auto;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 400;
+            color: #ac7868;
+            padding: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <button id="toggleSidebar" class="toggle-btn">☰</button>
+    <div class="sidebar" id="sidebar">
+        <h2>EDUZONE</h2>
+        <button onclick="getUserLocation()">Gunakan Lokasi Saat Ini</button>
+        <h4>Masukkan Koordinat:</h4>
+        <form id="coordsForm">
+            <label for="lat">Latitude:</label>
+            <input type="text" id="lat" name="lat" required>
+            <label for="lng">Longitude:</label>
+            <input type="text" id="lng" name="lng" required>
+            <button type="submit">Tampilkan Lokasi</button>
+        </form>
+        <br>
+        <label for="transportMode">Moda Transportasi:</label>
+        <select id="transportMode">
+            <option value="driving">Mobil</option>
+            <option value="cycling">Sepeda Motor</option>
+            <option value="walking">Jalan Kaki</option>
+        </select>
+        <button id="showLocation">Tampilkan</button>
+        <div class="footer">Farah Faradiba, PWK USK</div>
+        <script>
+            var sidebar = document.getElementById("sidebar");
+            var toggleButton = document.getElementById("toggleSidebar");
+            
+            toggleButton.addEventListener("click", function() {
+                sidebar.classList.toggle("hidden");
+                if (sidebar.classList.contains("hidden")) {
+                    toggleButton.classList.add("hidden");
+                } else {
+                    toggleButton.classList.remove("hidden");
+                }
+            });
+        </script>
+    </div>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([4.486049521789551, 98.0006728735919], 12);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        var userMarker;
+        var routeLine;
+        var zonasiRadius = 3000; // Radius zonasi dalam meter
+
+        var schools = [
+            { name: "SMA Negeri 1 Langsa", coords: [4.485424915508707, 97.95397977086314] },
+            { name: "SMA Negeri 2 Langsa", coords: [4.456914241430309, 97.9999240688021] },
+            { name: "SMA Negeri 3 Langsa", coords: [4.4717503114253985, 97.96243840927237] },
+            { name: "SMA Negeri 4 Langsa", coords: [4.5009810402201476, 97.96772348229236] },
+            { name: "SMA Negeri 5 Langsa", coords: [4.47078432315616, 97.9401968688022] }
+        ];
+
+        // Tambahkan marker untuk sekolah
+        schools.forEach(function(school) {
+            L.marker(school.coords).addTo(map)
+                .bindPopup('<b>' + school.name + '</b>');
+        });
+
+        // Tambahkan data GeoJSON (hasil dari konversi SHP ke GeoJSON)
+        var geojsonUrl = './AdmLangsaaJson.geojson'; // Ganti dengan URL atau path file GeoJSON
+        fetch(geojsonUrl)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error fetching GeoJSON: ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('GeoJSON Data:', data); // Debugging untuk memeriksa data
+                L.geoJSON(data, {
+                    style: function(feature) {
+                        return {
+                            color: 'blue', // Ubah warna batas administrasi sesuai preferensi
+                            weight: 2,
+                            fillOpacity: 0.1
+                        };
+                    }
+                }).addTo(map);
+            })
+            .catch(error => console.error('Error loading GeoJSON:', error));
+
+        // Fungsi untuk mendapatkan dan menampilkan rute
+        function getRoute(schoolLocation) {
+            var transportMode = document.getElementById("transportMode").value || 'driving'; // Opsi transportasi
+            var osrmUrl = `https://router.project-osrm.org/route/v1/${transportMode}/${userLocation.lng},${userLocation.lat};${schoolLocation[1]},${schoolLocation[0]}?overview=full&geometries=geojson`;
+
+            fetch(osrmUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.routes && data.routes.length > 0) {
+                        var route = data.routes[0].geometry;
+
+                        if (typeof routeLine !== 'undefined') {
+                            map.removeLayer(routeLine);
+                        }
+
+                        routeLine = L.geoJSON(route).addTo(map);
+                        map.fitBounds(routeLine.getBounds());
+
+                        var distanceInKm = (data.routes[0].distance / 1000).toFixed(2);
+
+                        var speeds = {
+                            driving: 50, // Kecepatan mobil
+                            cycling: 30,  // Kecepatan sepeda motor
+                            walking: 5    // Kecepatan jalan kaki
+                        };
+
+                        var speed = speeds[transportMode];
+                        var durationInMinutes = (distanceInKm / speed * 60).toFixed(2);
+
+                        alert(`Rute ditemukan! Jarak: ${distanceInKm} km, Waktu tempuh: ${durationInMinutes} menit`);
+                    } else {
+                        alert("Rute tidak ditemukan.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching OSRM data:", error);
+                });
+        }
+
+        // Fungsi untuk memeriksa sekolah dalam dan luar zonasi
+        function checkSchoolDistances(userLocation) {
+            var schoolsInZonasi = 0;
+
+            schools.forEach(function(school) {
+                var schoolLatLng = L.latLng(school.coords);
+                var userLatLng = L.latLng(userLocation.lat, userLocation.lng);
+                var distance = userLatLng.distanceTo(schoolLatLng);
+
+                if (distance <= zonasiRadius) {
+                    schoolsInZonasi++;
+                    L.circle(school.coords, {
+                        color: 'green',
+                        fillColor: '#00FF00',
+                        fillOpacity: 0.2,
+                        radius: 500
+                    }).addTo(map)
+                    .bindPopup(`<b>${school.name}</b><br><button onclick="getRoute([${school.coords}])">Tampilkan Rute</button><br><i>Anda berada dalam zonasi.</i>`)
+                    .openPopup();
+                } else {
+                    L.circle(school.coords, {
+                        color: 'red',
+                        fillColor: '#FF0000',
+                        fillOpacity: 0.2,
+                        radius: 500
+                    }).addTo(map)
+                    .bindPopup(`<b>${school.name}</b><br><i>Di luar zonasi.</i>`)
+                    .openPopup();
+                }
+            });
+
+            if (schoolsInZonasi === 0) {
+                alert("Anda berada di luar zonasi semua sekolah.");
+            }
+        }
+
+        // Fungsi untuk mendapatkan lokasi pengguna
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    userLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+
+                    if (userMarker) {
+                        map.removeLayer(userMarker);
+                    }
+
+                    userMarker = L.marker([userLocation.lat, userLocation.lng]).addTo(map)
+                        .bindPopup('Lokasi Anda')
+                        .openPopup();
+
+                    map.setView([userLocation.lat, userLocation.lng], 12);
+
+                    checkSchoolDistances(userLocation);
+                });
+            } else {
+                alert("Geolocation tidak didukung oleh browser Anda.");
+            }
+        }
+
+        // Fungsi untuk menampilkan lokasi berdasarkan koordinat manual
+        document.getElementById('coordsForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var lat = parseFloat(document.getElementById('lat').value);
+            var lng = parseFloat(document.getElementById('lng').value);
+
+            if (isNaN(lat) || isNaN(lng)) {
+                alert("Koordinat tidak valid.");
+                return;
+            }
+
+            userLocation = { lat: lat, lng: lng };
+
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+
+            userMarker = L.marker([userLocation.lat, userLocation.lng]).addTo(map)
+                .bindPopup('Lokasi Anda')
+                .openPopup();
+
+            map.setView([userLocation.lat, userLocation.lng], 12);
+
+            checkSchoolDistances(userLocation);
+        });
+    </script>
+</body>
+</html>
+
